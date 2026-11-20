@@ -1,0 +1,8 @@
+# Tema escuro: o app pinta o fundo de preto no CSS, então os componentes do
+# Streamlit (rótulos, abas, métricas, campos) também precisam estar no tema escuro.
+[theme]
+base = "dark"
+primaryColor = "#00E676"
+backgroundColor = "#080808"
+secondaryBackgroundColor = "#181818"
+textColor = "#FFFFFF"

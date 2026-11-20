@@ -214,7 +214,7 @@ st.markdown(
                 #32D583;
             border: 1px solid #333333;
             border-radius: 9px;
-            padding: 18px;
+            padding: 18px 18px 38px;  /* espaço embaixo para a barrinha .movie-indicator */
             scroll-snap-align: start;
             overflow: hidden;
             transition:
