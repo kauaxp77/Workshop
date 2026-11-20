@@ -1,9 +1,11 @@
 from pathlib import Path
 import re
 import joblib as jb
+import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import euclidean_distances
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 def clean_movies_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -61,20 +63,34 @@ def get_recommendations(
     model_variables: list,
     movie_title: str,
     top_n: int = 10,
+    metric: str = "cosine",
+    same_cluster_only: bool = False,
 ) -> pd.DataFrame:
-    """Gera recomendações usando cálculo vetorizado de distância euclidiana."""
+    """Gera recomendações usando cálculo vetorizado (cosseno ou euclidiana).
+
+    Args:
+        df_movies: DataFrame contendo a base de filmes.
+        model_variables: Lista de colunas dos gêneros (One-Hot).
+        movie_title: Título do filme de referência (em caixa alta).
+        top_n: Quantidade de recomendações a retornar.
+        metric: Métrica matemática ('cosine' ou 'euclidean').
+        same_cluster_only: Se True, restringe a busca ao mesmo cluster do filme.
+                           Se False, busca em todo o catálogo eliminando o 'muro cego'.
+    """
     filme_selecionado = df_movies[df_movies["TITLE"] == movie_title]
 
     if filme_selecionado.empty:
         return pd.DataFrame(columns=list(df_movies.columns) + ["SIMILARIDADE"])
 
-    cluster_filme = filme_selecionado["CLUSTER"].values[0]
-
-    # Filtra filmes do mesmo cluster, excluindo o filme de origem
-    df_rec = df_movies[
-        (df_movies["CLUSTER"] == cluster_filme)
-        & (df_movies["TITLE"] != movie_title)
-    ].copy()
+    # Filtra candidatos excluindo o próprio filme consultado
+    if same_cluster_only:
+        cluster_filme = filme_selecionado["CLUSTER"].values[0]
+        df_rec = df_movies[
+            (df_movies["CLUSTER"] == cluster_filme)
+            & (df_movies["TITLE"] != movie_title)
+        ].copy()
+    else:
+        df_rec = df_movies[df_movies["TITLE"] != movie_title].copy()
 
     if df_rec.empty:
         df_rec["SIMILARIDADE"] = []
@@ -94,11 +110,45 @@ def get_recommendations(
         .reindex(columns=model_variables, fill_value=0)
     )
 
-    # Distância Euclidiana em bloco (operações em C/BLAS)
-    distancias = euclidean_distances(genero_filme_selec, genero_filmes_candidatos)[0]
+    if metric == "cosine":
+        # Similaridade de Cosseno: varia de 0.0 a 1.0 (1.0 = idêntico em gênero)
+        scores = cosine_similarity(genero_filme_selec, genero_filmes_candidatos)[0]
+        df_rec["SIMILARIDADE"] = scores
+        # Desempate determinístico: maior similaridade, depois ano mais recente
+        return df_rec.sort_values(
+            by=["SIMILARIDADE", "ANO_FILME"],
+            ascending=[False, False]
+        ).head(top_n)
+    else:
+        # Distância Euclidiana tradicional
+        distancias = euclidean_distances(genero_filme_selec, genero_filmes_candidatos)[0]
+        df_rec["SIMILARIDADE"] = distancias
+        return df_rec.sort_values(
+            by=["SIMILARIDADE", "ANO_FILME"],
+            ascending=[True, False]
+        ).head(top_n)
 
-    df_rec["SIMILARIDADE"] = distancias
-    return df_rec.sort_values("SIMILARIDADE").head(top_n)
+
+def evaluate_genre_precision(target_genres: str, recommended_genres_series: pd.Series) -> float:
+    """Calcula a precisão média de sobreposição de gêneros das recomendações.
+
+    Mede a proporção dos gêneros recomendados que pertencem aos gêneros do filme alvo.
+    """
+    target_set = set(str(target_genres).upper().split("|"))
+    if not target_set:
+        return 0.0
+
+    precisions = []
+    for rec_genre_str in recommended_genres_series:
+        rec_set = set(str(rec_genre_str).upper().split("|"))
+        if not rec_set:
+            continue
+        inter = target_set.intersection(rec_set)
+        precisions.append(len(inter) / len(rec_set))
+
+    if not precisions:
+        return 0.0
+    return float(np.mean(precisions))
 
 
 def filter_movies(

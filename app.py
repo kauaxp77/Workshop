@@ -446,10 +446,17 @@ def criar_card_filme(filme, posicao):
 
     generos = html.escape(generos)
 
+    sim = filme.get("SIMILARIDADE")
+    if pd.notna(sim) and isinstance(sim, (int, float)):
+        pct = int(round(float(sim) * 100))
+        badge_text = f"{pct}% MATCH"
+    else:
+        badge_text = "RECOMENDADO"
+
     card = (    
         f'<article class="movie-card">'
         f'<div class="movie-number">{posicao:02d}</div>'
-        f'<div class="movie-badge"> RECOMENDADO </div>'
+        f'<div class="movie-badge"> {badge_text} </div>'
         f'<div class="movie-title"> {titulo} </div>'
         f'<div class="movie-year"> {ano} </div>'
         f'<div class="movie-genres"> {generos} </div>'
@@ -484,9 +491,16 @@ def exibir_linha_recomendacoes(recomendacoes):
 # ============================================================
 from src.recommender import get_recommendations, filter_movies
 
-def get_recomendacao(filme_selec, qtd_recomendacao = 10 ):
-    """Gera recomendações de filmes usando cálculo vetorizado."""
-    return get_recommendations(df_filmes, variaves_modelo, filme_selec, top_n=qtd_recomendacao)
+def get_recomendacao(filme_selec, qtd_recomendacao = 10, same_cluster_only = False ):
+    """Gera recomendações de filmes usando cálculo vetorizado por Similaridade de Cosseno."""
+    return get_recommendations(
+        df_filmes,
+        variaves_modelo,
+        filme_selec,
+        top_n=qtd_recomendacao,
+        metric="cosine",
+        same_cluster_only=same_cluster_only,
+    )
 
 # ============================================================
 # 8. CABEÇALHO
@@ -495,7 +509,7 @@ st.markdown(
     """
     <div class="app-header">
         <div class="app-logo">🎬 Recomendador de Filmes</div>
-        <div class="app-description">Sistema de recomendação baseado em Machine Learning (K-Means & Similaridade Euclidiana)</div>
+        <div class="app-description">Sistema inteligente de recomendação com Machine Learning (Similaridade de Cosseno Vetorizada & K-Means)</div>
     </div>
     """,
     unsafe_allow_html=True
